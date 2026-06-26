@@ -200,6 +200,13 @@ The bot is fully compliant with modern cloud providers. Because it runs on **lon
 4. Define your environment variables (`BOT_TOKEN`).
 5. Deploy.
 
+### Option C: PythonAnywhere (Using Flask Webhook)
+1. Clone this repository in a PythonAnywhere Bash Console.
+2. Create a virtual environment using Python 3.12 and install requirements.
+3. Configure a Flask Web App in your PythonAnywhere dashboard pointing to `wsgi.py`.
+4. Run the set webhook script once by visiting `https://<your-username>.pythonanywhere.com/set_webhook` in your browser.
+(For a detailed step-by-step walkthrough, refer to the PythonAnywhere Deployment Guide.)
+
 ---
 
 ## 💡 Bot Commands & Usage Examples
