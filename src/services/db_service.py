@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from src.database.models import User, ListType, ShoppingList, Item, ShoppingHistory, ShoppingHistoryItem
+from src.database.models import User, ListType, ShoppingList, Item, ShoppingHistory, ShoppingHistoryItem, PresetItem
 
 class DuplicateListNameError(Exception):
     """Exception raised when a user tries to create or rename a list to an existing name."""
@@ -246,3 +246,25 @@ class DBService:
         ).filter(ShoppingList.user_id == user_id).group_by(ShoppingList.type_id).all()
         
         return {type_id: count for type_id, count in counts}
+
+    def get_presets_for_category(self, user_id: int, type_id: int) -> List[PresetItem]:
+        """Retrieves default presets (user_id is None) and user-specific custom presets (user_id matches)."""
+        from sqlalchemy import or_
+        return self.db.query(PresetItem).filter(
+            PresetItem.type_id == type_id,
+            or_(PresetItem.user_id == None, PresetItem.user_id == user_id)
+        ).order_by(PresetItem.id.asc()).all()
+
+    def create_custom_preset(self, user_id: int, type_id: int, name: str, quantity: float = 1.0, unit: str = None) -> PresetItem:
+        """Creates a custom preset item for a specific user under a category."""
+        preset = PresetItem(
+            user_id=user_id,
+            type_id=type_id,
+            name=name.strip(),
+            quantity=quantity,
+            unit=unit.strip() if unit else None
+        )
+        self.db.add(preset)
+        self.db.commit()
+        self.db.refresh(preset)
+        return preset

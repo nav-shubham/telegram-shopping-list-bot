@@ -2,7 +2,7 @@ import logging
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from src.config import DATABASE_URL
-from src.database.models import Base, ListType
+from src.database.models import Base, ListType, PresetItem
 
 # Create engine
 import os
@@ -44,9 +44,37 @@ def init_db():
                 session.add(db_type)
             session.commit()
             logging.info("List types seeded successfully.")
+            
+        # Seed default presets
+        existing_presets = session.query(PresetItem).filter(PresetItem.user_id == None).count()
+        if existing_presets == 0:
+            logging.info("Seeding default preset items into database...")
+            default_presets = {
+                "Groceries": ["Milk", "Bread", "Eggs", "Sugar", "Salt", "Butter", "Rice", "Oil", "Tea", "Coffee"],
+                "Vegetables": ["Onion", "Tomato", "Potato", "Garlic", "Ginger", "Coriander", "Lemon", "Chilli", "Carrot", "Spinach"],
+                "Medical": ["Paracetamol", "Painkiller", "Band-aid", "Cough Syrup", "Antacid", "Vitamins", "Thermometer"],
+                "Household": ["Dish soap", "Sponge", "Detergent", "Garbage bags", "Toilet paper", "Glass cleaner", "Tissues"],
+                "Personal Care": ["Shampoo", "Soap", "Toothpaste", "Toothbrush", "Deodorant", "Hand wash", "Body lotion"],
+                "Other": ["Batteries", "Water bottle", "Snacks", "Chocolate", "Notebook"]
+            }
+            
+            for cat_name, items in default_presets.items():
+                list_type = session.query(ListType).filter(ListType.name == cat_name).first()
+                if list_type:
+                    for item_name in items:
+                        db_preset = PresetItem(
+                            user_id=None,
+                            type_id=list_type.id,
+                            name=item_name,
+                            quantity=1.0,
+                            unit=None
+                        )
+                        session.add(db_preset)
+            session.commit()
+            logging.info("Default presets seeded successfully.")
     except Exception as e:
         session.rollback()
-        logging.error(f"Error seeding list types: {e}")
+        logging.error(f"Error seeding database: {e}")
     finally:
         session.close()
 

@@ -182,3 +182,34 @@ def test_list_counts_and_clear_items(db_session):
     service.clear_all_items_in_list(lst1.id)
     assert len(service.get_items_in_list(lst1.id)) == 0
 
+def test_custom_presets(db_session):
+    service = DBService(db_session)
+    service.get_or_create_user(123)
+    
+    from src.database.models import PresetItem
+    default_preset = PresetItem(user_id=None, type_id=1, name="Default Bread", quantity=1.0)
+    db_session.add(default_preset)
+    db_session.commit()
+    
+    # Retrieve presets (user 123, type 1)
+    presets = service.get_presets_for_category(123, type_id=1)
+    assert len(presets) == 1
+    assert presets[0].name == "Default Bread"
+    
+    # Create custom preset
+    custom = service.create_custom_preset(user_id=123, type_id=1, name="Custom Butter", quantity=2.0, unit="pcs")
+    assert custom.name == "Custom Butter"
+    assert custom.quantity == 2.0
+    assert custom.unit == "pcs"
+    
+    # Retrieve presets again (should have default + custom)
+    presets_new = service.get_presets_for_category(123, type_id=1)
+    assert len(presets_new) == 2
+    assert presets_new[0].name == "Default Bread"
+    assert presets_new[1].name == "Custom Butter"
+    
+    # Verify another user does NOT see user 123's custom preset
+    presets_other = service.get_presets_for_category(456, type_id=1)
+    assert len(presets_other) == 1
+    assert presets_other[0].name == "Default Bread"
+

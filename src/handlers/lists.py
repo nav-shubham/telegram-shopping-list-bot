@@ -370,42 +370,38 @@ async def list_clear_all_callback_handler(update: Update, context: ContextTypes.
     await query.answer(text=f"🗑️ Cleared all {deleted_count} items!")
     await list_manage_callback_handler(update, context)
 
-# Preset items config for categories
-PRESETS = {
-    "Groceries": ["Milk", "Bread", "Eggs", "Sugar", "Salt", "Butter", "Rice", "Oil", "Tea", "Coffee"],
-    "Vegetables": ["Onion", "Tomato", "Potato", "Garlic", "Ginger", "Coriander", "Lemon", "Chilli", "Carrot", "Spinach"],
-    "Medical": ["Paracetamol", "Painkiller", "Band-aid", "Cough Syrup", "Antacid", "Vitamins", "Thermometer"],
-    "Household": ["Dish soap", "Sponge", "Detergent", "Garbage bags", "Toilet paper", "Glass cleaner", "Tissues"],
-    "Personal Care": ["Shampoo", "Soap", "Toothpaste", "Toothbrush", "Deodorant", "Hand wash", "Body lotion"],
-    "Other": ["Batteries", "Water bottle", "Snacks", "Chocolate", "Notebook"]
-}
-
-async def list_presets_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Displays standard presets for the list's category."""
-    query = update.callback_query
-    await query.answer()
-    
-    list_id = int(query.data.split(":")[-1])
+async def render_presets_screen(update: Update, context: ContextTypes.DEFAULT_TYPE, list_id: int) -> None:
+    """Helper to display the category presets screen (defaults + user-defined)."""
+    telegram_id = update.effective_user.id
     
     with get_db_session() as db:
         service = DBService(db)
         lst = service.get_shopping_list(list_id)
         if not lst:
-            await query.edit_message_text("List not found.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="list:view_all")]]))
+            msg = "List not found."
+            if update.callback_query:
+                await update.callback_query.edit_message_text(msg, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="list:view_all")]]))
+            else:
+                await update.message.reply_text(msg, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="list:view_all")]]))
             return
             
-        category_name = lst.list_type.name
-        presets = PRESETS.get(category_name, PRESETS["Other"])
+        presets = service.get_presets_for_category(telegram_id, lst.type_id)
         
         text = (
             f"📋 *Add Presets to List:* {lst.list_type.emoji} *{lst.name}*\n\n"
-            f"Select items from the presets below to quickly add them (qty = 1):"
+            "Select items from the presets below to quickly add them:\n\n"
+            "_Includes standard defaults and your custom additions._"
         )
         
         keyboard = []
         row = []
         for p in presets:
-            btn = InlineKeyboardButton(p, callback_data=f"list:pr_add:{p}:{list_id}")
+            qty_unit_suffix = ""
+            if p.quantity != 1.0 or p.unit:
+                qty_str = f" {int(p.quantity) if p.quantity.is_integer() else p.quantity}"
+                unit_str = f"{p.unit}" if p.unit else ""
+                qty_unit_suffix = f" ({qty_str.strip()}{unit_str})"
+            btn = InlineKeyboardButton(f"{p.name}{qty_unit_suffix}", callback_data=f"list:pr_add:{p.name}:{list_id}")
             row.append(btn)
             if len(row) == 2:
                 keyboard.append(row)
@@ -413,9 +409,22 @@ async def list_presets_callback_handler(update: Update, context: ContextTypes.DE
         if row:
             keyboard.append(row)
             
+        keyboard.append([InlineKeyboardButton("➕ Add Custom Preset", callback_data=f"list:presets_add:{list_id}")])
         keyboard.append([InlineKeyboardButton("🔙 Back to List Settings", callback_data=f"list:manage:{list_id}")])
         
-        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        if update.callback_query:
+            await update.callback_query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+        else:
+            await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+
+async def list_presets_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Displays standard + custom presets for the list's category."""
+    query = update.callback_query
+    await query.answer()
+    
+    list_id = int(query.data.split(":")[-1])
+    await render_presets_screen(update, context, list_id)
 
 async def list_preset_add_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Adds a preset item and keeps the user on the presets menu."""
@@ -430,3 +439,57 @@ async def list_preset_add_callback_handler(update: Update, context: ContextTypes
         service.add_items_to_list(list_id, [{"name": preset_name, "quantity": 1.0, "unit": None}])
         
     await query.answer(text=f"➕ Added {preset_name}!")
+
+async def list_presets_add_prompt_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Prompts user to type a new custom preset name."""
+    query = update.callback_query
+    await query.answer()
+    
+    list_id = int(query.data.split(":")[-1])
+    
+    context.user_data["state"] = "WAITING_FOR_PRESET_NAME"
+    context.user_data["active_list_id"] = list_id
+    
+    text = (
+        "✍️ *Add Custom Preset*\n\n"
+        "Please type the preset item name you want to save in this category.\n"
+        "You can include a standard quantity/unit (e.g. `Apples 6pcs` or `Milk 2`)."
+    )
+    keyboard = [[InlineKeyboardButton("🔙 Cancel", callback_data=f"list:presets:{list_id}")]]
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+
+async def handle_custom_preset_input(update: Update, context: ContextTypes.DEFAULT_TYPE, text_input: str) -> None:
+    """Parses text input and saves it as a custom preset item."""
+    list_id = context.user_data.get("active_list_id")
+    if not list_id:
+        context.user_data.clear()
+        await update.message.reply_text("An error occurred. Please try again.")
+        return
+        
+    from src.parser.parser import parse_item_line
+    parsed = parse_item_line(text_input)
+    if not parsed or not parsed["name"].strip():
+        await update.message.reply_text("⚠️ Invalid preset name. Please try again:")
+        return
+        
+    telegram_id = update.effective_user.id
+    
+    with get_db_session() as db:
+        service = DBService(db)
+        lst = service.get_shopping_list(list_id)
+        if not lst:
+            context.user_data.clear()
+            await update.message.reply_text("List not found.")
+            return
+            
+        service.create_custom_preset(
+            user_id=telegram_id,
+            type_id=lst.type_id,
+            name=parsed["name"],
+            quantity=parsed["quantity"],
+            unit=parsed["unit"]
+        )
+        
+    context.user_data.pop("state", None)
+    context.user_data.pop("active_list_id", None)
+    await render_presets_screen(update, context, list_id)

@@ -86,3 +86,14 @@ class ShoppingHistoryItem(Base):
 
     # Relationships
     history = relationship("ShoppingHistory", back_populates="items")
+
+class PresetItem(Base):
+    __tablename__ = "presets"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(BigInteger, ForeignKey("users.telegram_id", ondelete="CASCADE"), nullable=True) # Null for system defaults
+    type_id = Column(Integer, ForeignKey("list_types.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String, nullable=False)
+    quantity = Column(Float, default=1.0)
+    unit = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)

@@ -30,7 +30,8 @@ from src.handlers.lists import (
     list_clear_completed_callback_handler,
     list_clear_all_callback_handler,
     list_presets_callback_handler,
-    list_preset_add_callback_handler
+    list_preset_add_callback_handler,
+    list_presets_add_prompt_callback_handler
 )
 from src.handlers.items import (
     item_add_callback_handler,
@@ -119,6 +120,7 @@ def build_application() -> Application:
     application.add_handler(CallbackQueryHandler(list_clear_all_callback_handler, pattern=r"^list:clear_all:\d+$"))
     application.add_handler(CallbackQueryHandler(list_presets_callback_handler, pattern=r"^list:presets:\d+$"))
     application.add_handler(CallbackQueryHandler(list_preset_add_callback_handler, pattern=r"^list:pr_add:[^:]+:\d+$"))
+    application.add_handler(CallbackQueryHandler(list_presets_add_prompt_callback_handler, pattern=r"^list:presets_add:\d+$"))
     
     # Callback Query Handlers (Items)
     application.add_handler(CallbackQueryHandler(item_add_callback_handler, pattern=r"^item:add:\d+$"))

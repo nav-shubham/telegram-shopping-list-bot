@@ -6,7 +6,8 @@ from src.handlers.lists import (
     handle_list_rename_input, 
     view_list_detail_screen,
     view_all_lists_handler,
-    create_select_type_handler
+    create_select_type_handler,
+    handle_custom_preset_input
 )
 from src.handlers.items import handle_items_paste_input, handle_item_edit_input
 from src.handlers.shopping import view_shopping_mode_screen
@@ -39,6 +40,10 @@ async def text_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         
     elif state == "WAITING_FOR_ITEMS":
         await handle_items_paste_input(update, context, text)
+        return
+        
+    elif state == "WAITING_FOR_PRESET_NAME":
+        await handle_custom_preset_input(update, context, text)
         return
         
     elif state in ["WAITING_FOR_ITEM_NAME", "WAITING_FOR_ITEM_QTY", "WAITING_FOR_ITEM_UNIT"]:
