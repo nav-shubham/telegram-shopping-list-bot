@@ -268,3 +268,30 @@ class DBService:
         self.db.commit()
         self.db.refresh(preset)
         return preset
+
+    def get_preset_item(self, preset_id: int) -> Optional[PresetItem]:
+        """Gets a preset item by ID."""
+        return self.db.query(PresetItem).filter(PresetItem.id == preset_id).first()
+
+    def update_preset_item(self, preset_id: int, name: Optional[str] = None, quantity: Optional[float] = None, unit: Optional[str] = None) -> Optional[PresetItem]:
+        """Updates a custom preset item."""
+        preset = self.get_preset_item(preset_id)
+        if preset:
+            if name is not None:
+                preset.name = name.strip()
+            if quantity is not None:
+                preset.quantity = quantity
+            if unit is not None:
+                preset.unit = unit.strip() if unit.strip() else None
+            self.db.commit()
+            self.db.refresh(preset)
+        return preset
+
+    def delete_preset_item(self, preset_id: int) -> bool:
+        """Deletes a custom preset item."""
+        preset = self.get_preset_item(preset_id)
+        if preset:
+            self.db.delete(preset)
+            self.db.commit()
+            return True
+        return False

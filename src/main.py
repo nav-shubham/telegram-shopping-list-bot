@@ -31,7 +31,11 @@ from src.handlers.lists import (
     list_clear_all_callback_handler,
     list_presets_callback_handler,
     list_preset_add_callback_handler,
-    list_presets_add_prompt_callback_handler
+    list_presets_add_prompt_callback_handler,
+    list_presets_manage_callback_handler,
+    preset_view_callback_handler,
+    preset_edit_field_callback_handler,
+    preset_delete_callback_handler
 )
 from src.handlers.items import (
     item_add_callback_handler,
@@ -121,6 +125,10 @@ def build_application() -> Application:
     application.add_handler(CallbackQueryHandler(list_presets_callback_handler, pattern=r"^list:presets:\d+$"))
     application.add_handler(CallbackQueryHandler(list_preset_add_callback_handler, pattern=r"^list:pr_add:[^:]+:\d+$"))
     application.add_handler(CallbackQueryHandler(list_presets_add_prompt_callback_handler, pattern=r"^list:presets_add:\d+$"))
+    application.add_handler(CallbackQueryHandler(list_presets_manage_callback_handler, pattern=r"^list:presets_manage:\d+$"))
+    application.add_handler(CallbackQueryHandler(preset_view_callback_handler, pattern=r"^preset:view:\d+:\d+$"))
+    application.add_handler(CallbackQueryHandler(preset_edit_field_callback_handler, pattern=r"^preset:edit_(name|qty|unit):\d+:\d+$"))
+    application.add_handler(CallbackQueryHandler(preset_delete_callback_handler, pattern=r"^preset:delete:\d+:\d+$"))
     
     # Callback Query Handlers (Items)
     application.add_handler(CallbackQueryHandler(item_add_callback_handler, pattern=r"^item:add:\d+$"))

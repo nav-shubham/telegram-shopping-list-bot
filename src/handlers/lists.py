@@ -409,7 +409,10 @@ async def render_presets_screen(update: Update, context: ContextTypes.DEFAULT_TY
         if row:
             keyboard.append(row)
             
-        keyboard.append([InlineKeyboardButton("➕ Add Custom Preset", callback_data=f"list:presets_add:{list_id}")])
+        keyboard.append([
+            InlineKeyboardButton("➕ Add Custom", callback_data=f"list:presets_add:{list_id}"),
+            InlineKeyboardButton("✏️ Edit Custom", callback_data=f"list:presets_manage:{list_id}")
+        ])
         keyboard.append([InlineKeyboardButton("🔙 Back to List Settings", callback_data=f"list:manage:{list_id}")])
         
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -493,3 +496,190 @@ async def handle_custom_preset_input(update: Update, context: ContextTypes.DEFAU
     context.user_data.pop("state", None)
     context.user_data.pop("active_list_id", None)
     await render_presets_screen(update, context, list_id)
+
+async def list_presets_manage_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Displays only user's custom presets in this category to edit or delete."""
+    query = update.callback_query
+    await query.answer()
+    
+    list_id = int(query.data.split(":")[-1])
+    telegram_id = update.effective_user.id
+    
+    with get_db_session() as db:
+        service = DBService(db)
+        lst = service.get_shopping_list(list_id)
+        if not lst:
+            await query.edit_message_text("List not found.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="list:view_all")]]))
+            return
+            
+        presets = service.get_presets_for_category(telegram_id, lst.type_id)
+        # Filter for user-added presets only (where user_id is not None)
+        custom_presets = [p for p in presets if p.user_id is not None]
+        
+        text = (
+            f"⚙️ *Manage Custom Presets:* {lst.list_type.emoji} *{lst.name}*\n\n"
+            "Select one of your custom presets below to edit or delete it:\n"
+            "_(Default presets cannot be modified)_"
+        )
+        
+        keyboard = []
+        if custom_presets:
+            for p in custom_presets:
+                qty_unit_suffix = ""
+                if p.quantity != 1.0 or p.unit:
+                    qty_str = f" {int(p.quantity) if p.quantity.is_integer() else p.quantity}"
+                    unit_str = f"{p.unit}" if p.unit else ""
+                    qty_unit_suffix = f" ({qty_str.strip()}{unit_str})"
+                btn_text = f"✏️ {p.name}{qty_unit_suffix}"
+                keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"preset:view:{p.id}:{list_id}")])
+        else:
+            text += "\n\n_You haven't added any custom presets in this category yet. Click Add Custom Preset inside the presets menu to create one!_"
+            
+        keyboard.append([InlineKeyboardButton("🔙 Back to Presets", callback_data=f"list:presets:{list_id}")])
+        
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+
+async def render_preset_detail_screen(update: Update, context: ContextTypes.DEFAULT_TYPE, preset_id: int, list_id: int) -> None:
+    """Helper to display the custom preset detail card with edit options."""
+    with get_db_session() as db:
+        service = DBService(db)
+        preset = service.get_preset_item(preset_id)
+        if not preset:
+            msg = "Preset not found."
+            if update.callback_query:
+                await update.callback_query.edit_message_text(msg, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=f"list:presets_manage:{list_id}")]]))
+            else:
+                await update.message.reply_text(msg, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=f"list:presets_manage:{list_id}")]]))
+            return
+            
+        qty_str = f"{int(preset.quantity) if preset.quantity.is_integer() else preset.quantity}"
+        unit_str = preset.unit if preset.unit else "None"
+        
+        text = (
+            f"⚙️ *Custom Preset Details*\n\n"
+            f"• *Name:* {preset.name}\n"
+            f"• *Quantity:* {qty_str}\n"
+            f"• *Unit:* {unit_str}"
+        )
+        
+        keyboard = [
+            [
+                InlineKeyboardButton("✏️ Edit Name", callback_data=f"preset:edit_name:{preset.id}:{list_id}"),
+                InlineKeyboardButton("🔢 Edit Qty", callback_data=f"preset:edit_qty:{preset.id}:{list_id}")
+            ],
+            [
+                InlineKeyboardButton("⚖️ Edit Unit", callback_data=f"preset:edit_unit:{preset.id}:{list_id}"),
+                InlineKeyboardButton("🗑️ Delete Preset", callback_data=f"preset:delete:{preset.id}:{list_id}")
+            ],
+            [InlineKeyboardButton("🔙 Back to Presets", callback_data=f"list:presets_manage:{list_id}")]
+        ]
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        if update.callback_query:
+            await update.callback_query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+        else:
+            await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+
+async def preset_view_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Callback query to view custom preset detail card."""
+    query = update.callback_query
+    await query.answer()
+    
+    parts = query.data.split(":")
+    preset_id = int(parts[2])
+    list_id = int(parts[3])
+    
+    await render_preset_detail_screen(update, context, preset_id, list_id)
+
+async def preset_edit_field_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Prompts user to edit specific attribute of a custom preset."""
+    query = update.callback_query
+    await query.answer()
+    
+    parts = query.data.split(":")
+    field = parts[1] # "edit_name", "edit_qty", "edit_unit"
+    preset_id = int(parts[2])
+    list_id = int(parts[3])
+    
+    context.user_data["active_preset_id"] = preset_id
+    context.user_data["active_list_id"] = list_id
+    
+    with get_db_session() as db:
+        service = DBService(db)
+        preset = service.get_preset_item(preset_id)
+        
+        if field == "edit_name":
+            context.user_data["state"] = "WAITING_FOR_PRESET_EDIT_NAME"
+            text = f"✍️ Enter new name for custom preset *\"{preset.name}\"*:"
+        elif field == "edit_qty":
+            context.user_data["state"] = "WAITING_FOR_PRESET_EDIT_QTY"
+            text = f"🔢 Enter new quantity for preset *\"{preset.name}\"* (currently {preset.quantity}):"
+        elif field == "edit_unit":
+            context.user_data["state"] = "WAITING_FOR_PRESET_EDIT_UNIT"
+            text = f"⚖️ Enter new unit for preset *\"{preset.name}\"* (currently {preset.unit or 'none'}).\n\n_Type - or none to clear the unit._"
+        else:
+            return
+            
+        keyboard = [[InlineKeyboardButton("🔙 Cancel", callback_data=f"preset:view:{preset_id}:{list_id}")]]
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+
+async def handle_custom_preset_edit_input(update: Update, context: ContextTypes.DEFAULT_TYPE, text_input: str) -> None:
+    """Processes text input to update custom preset fields."""
+    state = context.user_data.get("state")
+    preset_id = context.user_data.get("active_preset_id")
+    list_id = context.user_data.get("active_list_id")
+    
+    if not preset_id or not state:
+        context.user_data.clear()
+        await update.message.reply_text("An error occurred. Please try again.")
+        return
+        
+    with get_db_session() as db:
+        service = DBService(db)
+        preset = service.get_preset_item(preset_id)
+        if not preset:
+            context.user_data.clear()
+            await update.message.reply_text("Preset not found.")
+            return
+            
+        if state == "WAITING_FOR_PRESET_EDIT_NAME":
+            if not text_input.strip():
+                await update.message.reply_text("⚠️ Preset name cannot be empty. Please enter a valid name:")
+                return
+            service.update_preset_item(preset_id, name=text_input)
+            
+        elif state == "WAITING_FOR_PRESET_EDIT_QTY":
+            try:
+                qty = float(text_input)
+                if qty <= 0:
+                    raise ValueError
+            except ValueError:
+                await update.message.reply_text("⚠️ Please enter a positive number for the quantity:")
+                return
+            service.update_preset_item(preset_id, quantity=qty)
+            
+        elif state == "WAITING_FOR_PRESET_EDIT_UNIT":
+            unit = text_input.strip()
+            if unit.lower() in ["none", "-", "no unit", "/none"]:
+                unit = ""
+            service.update_preset_item(preset_id, unit=unit)
+            
+        context.user_data.pop("state", None)
+        context.user_data.pop("active_preset_id", None)
+        context.user_data.pop("active_list_id", None)
+        await render_preset_detail_screen(update, context, preset_id, list_id)
+
+async def preset_delete_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Deletes a custom preset from the database."""
+    query = update.callback_query
+    
+    parts = query.data.split(":")
+    preset_id = int(parts[2])
+    list_id = int(parts[3])
+    
+    with get_db_session() as db:
+        service = DBService(db)
+        service.delete_preset_item(preset_id)
+        
+    await query.answer(text="🗑️ Preset deleted!")
+    await list_presets_manage_callback_handler(update, context)

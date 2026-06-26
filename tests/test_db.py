@@ -213,3 +213,29 @@ def test_custom_presets(db_session):
     assert len(presets_other) == 1
     assert presets_other[0].name == "Default Bread"
 
+def test_custom_preset_update_and_delete(db_session):
+    service = DBService(db_session)
+    service.get_or_create_user(123)
+    
+    # Create
+    custom = service.create_custom_preset(user_id=123, type_id=1, name="Custom Butter", quantity=2.0, unit="pcs")
+    
+    # Update
+    updated = service.update_preset_item(custom.id, name="Special Butter", quantity=3.5, unit="g")
+    assert updated is not None
+    assert updated.name == "Special Butter"
+    assert updated.quantity == 3.5
+    assert updated.unit == "g"
+    
+    # Verify retrieval
+    retrieved = service.get_preset_item(custom.id)
+    assert retrieved.name == "Special Butter"
+    
+    # Delete
+    success = service.delete_preset_item(custom.id)
+    assert success is True
+    
+    # Verify deleted
+    assert service.get_preset_item(custom.id) is None
+
+
