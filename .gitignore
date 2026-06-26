@@ -1,0 +1,29 @@
+# Python caching
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+env/
+
+# IDE / Editor configuration
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project local SQLite DB & directories
+*.db
+*.db-journal
+data/
+shopping_list.db
+
+# Private environment config (tokens)
+.env
+
+# Testing cache
+.pytest_cache/

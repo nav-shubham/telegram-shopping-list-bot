@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  shopping-bot:
+    build: .
+    container_name: telegram_shopping_bot
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    environment:
+      # Override the database URL to save it in the persisted volume
+      - DATABASE_URL=sqlite:///data/shopping_list.db
