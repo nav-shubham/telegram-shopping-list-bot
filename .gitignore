@@ -27,3 +27,37 @@ shopping_list.db
 
 # Testing cache
 .pytest_cache/
+
+# Global python/node ignores added by sync script
+node_modules/
+.ipynb_checkpoints/
+.tmp/
+temp/
+tmp/
+
+# Databases & large files
+*.sqlite
+*.sqlite3
+*.exe
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
+*.pdf
+*.xlsx
+*.xls
+*.mp4
+*.mp3
+*.wav
+*.avi
+*.mkv
+cookies.json
+cookies.txt
+
+# Common download/data directories
+downloads/
+downloaded_reports/
+pdfjs/
+google_colab/
+new chat/
